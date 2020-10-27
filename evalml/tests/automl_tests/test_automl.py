@@ -1,6 +1,6 @@
 import os
 from itertools import product
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import cloudpickle
 import numpy as np
