@@ -22,9 +22,11 @@ class EngineBase(ABC):
         self.y = None
         self.search = None
 
-    def load_data(self, X, y, search):
+    def load_data(self, X, y):
         self.X = X
         self.y = y
+
+    def load_search(self, search):
         self.search = search
 
     @abstractmethod
@@ -48,7 +50,7 @@ class EngineBase(ABC):
                         (current_iteration if current_iteration else len(self.search._results['pipeline_results'])) + 1,
                         self.search.max_iterations,
                         self.search._start,
-                        self.search._automl_algorithm.batch_number,
+                        1 if self.search._automl_algorithm.batch_number == 0 else self.search._automl_algorithm.batch_number,
                         self.search.show_batch_output)
 
     def _compute_cv_scores(self, pipeline, X, y):
@@ -76,7 +78,7 @@ class EngineBase(ABC):
                 X_threshold_tuning = None
                 y_threshold_tuning = None
                 if self.search.optimize_thresholds and self.search.objective.problem_type == ProblemTypes.BINARY and self.search.objective.can_optimize_threshold:
-                    X_train, X_threshold_tuning, y_train, y_threshold_tuning = train_test_split(X_train, y_train, test_size=0.2, random_state=self.random_state)
+                    X_train, X_threshold_tuning, y_train, y_threshold_tuning = train_test_split(X_train, y_train, test_size=0.2, random_state=self.search.random_state)
                 cv_pipeline = pipeline.clone(pipeline.random_state)
                 logger.debug(f"\t\t\tFold {i}: starting training")
                 cv_pipeline.fit(X_train, y_train)
