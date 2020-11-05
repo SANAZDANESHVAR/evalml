@@ -756,27 +756,34 @@ class AutoMLSearch:
 
         engine.load_search(self)
         if isinstance(current_pipeline_batch, PipelineBase):
-            pipeline, result = engine.evaluate_pipeline(current_pipeline_batch, log_pipeline=baseline)
-            if len(result) == 0:
-                return result
-            parameters = pipeline.parameters
-            logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, result))
-            self._add_result(trained_pipeline=pipeline,
-                             parameters=parameters,
-                             training_time=result['training_time'],
-                             cv_data=result['cv_data'],
-                             cv_scores=result['cv_scores'])
-            logger.debug('Adding results complete')
+            result = []
+            while result == []:
+                pipeline, result = engine.evaluate_pipeline(current_pipeline_batch, log_pipeline=baseline)
+                if pipeline == []:
+                    return result
+                if len(result) == 0:
+                    continue
+                parameters = pipeline.parameters
+                logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, result))
+                self._add_result(trained_pipeline=pipeline,
+                                parameters=parameters,
+                                training_time=result['training_time'],
+                                cv_data=result['cv_data'],
+                                cv_scores=result['cv_scores'])
+                logger.debug('Adding results complete')
 
-            if baseline:
-                self._baseline_cv_scores = self._get_mean_cv_scores_for_all_objectives(result["cv_data"])
+                if baseline:
+                    self._baseline_cv_scores = self._get_mean_cv_scores_for_all_objectives(result["cv_data"])
 
-            score = result['cv_score_mean']
-            score_to_minimize = -score if self.objective.greater_is_better else score
-            current_batch_pipeline_scores.append(score_to_minimize)
+                score = result['cv_score_mean']
+                score_to_minimize = -score if self.objective.greater_is_better else score
+                current_batch_pipeline_scores.append(score_to_minimize)
 
         else:
-            fitted_pipelines, evaluation_results = engine.evaluate_batch(current_pipeline_batch)
+            fitted_pipelines = []
+            evaluation_results = []
+            while len(current_pipeline_batch) != 0:
+                fitted_pipelines, evaluation_results, current_pipeline_batch = engine.evaluate_batch(current_pipeline_batch)
             for pipeline, result in zip(fitted_pipelines, evaluation_results):
                 parameters = pipeline.parameters
                 logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, evaluation_results))
