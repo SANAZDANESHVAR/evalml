@@ -764,6 +764,10 @@ class AutoMLSearch:
                 if len(result) == 0:
                     continue
                 parameters = pipeline.parameters
+
+                if baseline:
+                    self._baseline_cv_scores = self._get_mean_cv_scores_for_all_objectives(result["cv_data"])
+
                 logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, result))
                 self._add_result(trained_pipeline=pipeline,
                                 parameters=parameters,
@@ -771,9 +775,6 @@ class AutoMLSearch:
                                 cv_data=result['cv_data'],
                                 cv_scores=result['cv_scores'])
                 logger.debug('Adding results complete')
-
-                if baseline:
-                    self._baseline_cv_scores = self._get_mean_cv_scores_for_all_objectives(result["cv_data"])
 
                 score = result['cv_score_mean']
                 score_to_minimize = -score if self.objective.greater_is_better else score
