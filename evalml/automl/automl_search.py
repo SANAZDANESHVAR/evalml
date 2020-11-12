@@ -400,8 +400,11 @@ class AutoMLSearch:
 
             data_checks (DataChecks, list(Datacheck), str, None): A collection of data checks to run before
                 automl search. If data checks produce any errors, an exception will be thrown before the
-                search begins. If "disabled" or None, no data checks will be done.
+                search begins. If "disabled" or None, `no` data checks will be done.
                 If set to "auto", DefaultDataChecks will be done. Default value is set to "auto".
+
+            feature_types (list, optional): list of feature types, either numerical or categorical.
+                Categorical features will automatically be encoded
 
             show_iteration_plot (boolean, True): Shows an iteration vs. score plot in Jupyter notebook.
                 Disabled by default in non-Jupyter enviroments.
@@ -596,7 +599,9 @@ class AutoMLSearch:
 
         pipelines = [baseline]
         scores = self._evaluate_pipelines(pipelines, X, y, baseline=True)
-        return len(scores) == 0
+        if scores == []:
+            return True
+        return False
 
     @staticmethod
     def _get_mean_cv_scores_for_all_objectives(cv_data):
@@ -788,7 +793,7 @@ class AutoMLSearch:
 
             except KeyboardInterrupt:
                 current_pipeline_batch = self._handle_keyboard_interrupt(pipeline, current_pipeline_batch)
-                if len(current_pipeline_batch) == 0:
+                if current_pipeline_batch == []:
                     return current_batch_pipeline_scores
 
         return current_batch_pipeline_scores
