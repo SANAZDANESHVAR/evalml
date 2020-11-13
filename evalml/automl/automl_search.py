@@ -1,25 +1,12 @@
 import copy
-import sys
 import time
-import traceback
-from collections import OrderedDict, defaultdict
+from collections import defaultdict
 
 import cloudpickle
 import numpy as np
 import pandas as pd
 import woodwork as ww
-from sklearn.model_selection import (
-    BaseCrossValidator,
-    KFold,
-    StratifiedKFold
-)
-
-from evalml.problem_types import ProblemTypes
-from sklearn.model_selection import train_test_split
-from evalml.exceptions import PipelineScoreError
-from collections import OrderedDict
-from evalml.model_family import ModelFamily
-from evalml.pipelines import BinaryClassificationPipeline
+from sklearn.model_selection import BaseCrossValidator, KFold, StratifiedKFold
 
 from .pipeline_search_plots import PipelineSearchPlots
 
@@ -68,8 +55,6 @@ from evalml.utils.logger import (
     log_title,
     time_elapsed
 )
-
-from evalml.automl.engines import SequentialEngine
 
 logger = get_logger(__file__)
 
@@ -393,7 +378,7 @@ class AutoMLSearch:
 
         self.data_split = self.data_split or default_data_split
 
-    def search(self, X, y, data_checks="auto", show_iteration_plot=True):
+    def search(self, X, y, data_checks="auto", show_iteration_plot=True, engine=None):
         """Find the best pipeline for the data set.
 
         Arguments:
@@ -444,7 +429,7 @@ class AutoMLSearch:
         if self._data_check_results["errors"]:
             raise ValueError("Data checks raised some warnings and/or errors. Please see `self.data_check_results` for more information or pass data_checks='disabled' to search() to disable data checking.")
         if self.allowed_pipelines is None:
-            logger.info("Generating pipelines to search over...")
+            logger.debug("Generating pipelines to search over...")
             allowed_estimators = get_estimators(self.problem_type, self.allowed_model_families)
             logger.debug(f"allowed_estimators set to {[estimator.name for estimator in allowed_estimators]}")
             self.allowed_pipelines = [make_pipeline(X, y, estimator, self.problem_type, text_columns=text_columns) for estimator in allowed_estimators]
@@ -488,6 +473,8 @@ class AutoMLSearch:
         log_title(logger, "Beginning pipeline search")
         logger.info("Optimizing for %s. " % self.objective.name)
         logger.info("{} score is better.\n".format('Greater' if self.objective.greater_is_better else 'Lower'))
+        if engine:
+            logger.info(f"Using {engine.name} to process pipelines.")
 
         if self.max_batches is not None:
             logger.info(f"Searching up to {self.max_batches} batches for a total of {self.max_iterations} pipelines. ")
@@ -519,7 +506,7 @@ class AutoMLSearch:
                 break
 
             current_batch_size = len(current_batch_pipelines)
-            current_batch_pipeline_scores = self._evaluate_pipelines(current_batch_pipelines, X, y, search_iteration_plot=search_iteration_plot)
+            current_batch_pipeline_scores = self._evaluate_pipelines(current_batch_pipelines, X, y, search_iteration_plot=search_iteration_plot, engine=engine)
 
             if search_iteration_plot:
                 search_iteration_plot.update()
@@ -528,6 +515,7 @@ class AutoMLSearch:
             if len(current_batch_pipeline_scores) != current_batch_size:
                 break
 
+        self.search_duration = time.time() - self._start
         elapsed_time = time_elapsed(self._start)
         desc = f"\nSearch finished after {elapsed_time}"
         desc = desc.ljust(self._MAX_NAME_LEN)
@@ -585,7 +573,7 @@ class AutoMLSearch:
             if pipeline.problem_type != self.problem_type:
                 raise ValueError("Given pipeline {} is not compatible with problem_type {}.".format(pipeline.name, self.problem_type.value))
 
-    def _add_baseline_pipelines(self, X, y):
+    def _add_baseline_pipelines(self, X, y, engine=None):
         """Fits a baseline pipeline to the data.
 
         This is the first pipeline fit during search.
@@ -606,7 +594,7 @@ class AutoMLSearch:
         else:
             baseline = MeanBaselineRegressionPipeline(parameters={})
 
-        scores = self._evaluate_pipelines(baseline, X, y, baseline=True)
+        scores = self._evaluate_pipelines(baseline, X, y, baseline=True, engine=engine)
         if scores == []:
             return True
         return False
@@ -621,87 +609,6 @@ class AutoMLSearch:
                 if field.lower() in objective_names:
                     scores[field] += value
         return {objective_name: float(score) / n_folds for objective_name, score in scores.items()}
-
-    def _compute_cv_scores(self, pipeline, X, y):
-        start = time.time()
-        cv_data = []
-        logger.info("\tStarting cross validation")
-        for i, (train, test) in enumerate(self.data_split.split(X, y)):
-            if pipeline.model_family == ModelFamily.ENSEMBLE and i > 0:
-                # Stacked ensembles do CV internally, so we do not run CV here for performance reasons.
-                logger.debug(f"Skipping fold {i} because CV for stacked ensembles is not supported.")
-                break
-            logger.debug(f"\t\tTraining and scoring on fold {i}")
-            X_train, X_test = X.iloc[train], X.iloc[test]
-            y_train, y_test = y.iloc[train], y.iloc[test]
-            if self.problem_type in [ProblemTypes.BINARY, ProblemTypes.MULTICLASS]:
-                diff_train = set(np.setdiff1d(y, y_train))
-                diff_test = set(np.setdiff1d(y, y_test))
-                diff_string = f"Missing target values in the training set after data split: {diff_train}. " if diff_train else ""
-                diff_string += f"Missing target values in the test set after data split: {diff_test}." if diff_test else ""
-                if diff_string:
-                    raise Exception(diff_string)
-            objectives_to_score = [self.objective] + self.additional_objectives
-            cv_pipeline = None
-            try:
-                X_threshold_tuning = None
-                y_threshold_tuning = None
-                if self.optimize_thresholds and self.objective.problem_type == ProblemTypes.BINARY and self.objective.can_optimize_threshold:
-                    X_train, X_threshold_tuning, y_train, y_threshold_tuning = train_test_split(X_train, y_train, test_size=0.2, random_state=self.random_state)
-                cv_pipeline = pipeline.clone(pipeline.random_state)
-                logger.debug(f"\t\t\tFold {i}: starting training")
-                cv_pipeline.fit(X_train, y_train)
-                logger.debug(f"\t\t\tFold {i}: finished training")
-                if self.objective.problem_type == ProblemTypes.BINARY:
-                    cv_pipeline.threshold = 0.5
-                    if self.optimize_thresholds and self.objective.can_optimize_threshold:
-                        logger.debug(f"\t\t\tFold {i}: Optimizing threshold for {self.objective.name}")
-                        y_predict_proba = cv_pipeline.predict_proba(X_threshold_tuning)
-                        if isinstance(y_predict_proba, pd.DataFrame):
-                            y_predict_proba = y_predict_proba.iloc[:, 1]
-                        else:
-                            y_predict_proba = y_predict_proba[:, 1]
-                        cv_pipeline.threshold = self.objective.optimize_threshold(y_predict_proba, y_threshold_tuning, X=X_threshold_tuning)
-                        logger.debug(f"\t\t\tFold {i}: Optimal threshold found ({cv_pipeline.threshold:.3f})")
-                logger.debug(f"\t\t\tFold {i}: Scoring trained pipeline")
-                scores = cv_pipeline.score(X_test, y_test, objectives=objectives_to_score)
-                logger.debug(f"\t\t\tFold {i}: {self.objective.name} score: {scores[self.objective.name]:.3f}")
-                score = scores[self.objective.name]
-            except Exception as e:
-                if isinstance(e, PipelineScoreError):
-                    logger.info(f"\t\t\tFold {i}: Encountered an error scoring the following objectives: {', '.join(e.exceptions)}.")
-                    logger.info(f"\t\t\tFold {i}: The scores for these objectives will be replaced with nan.")
-                    logger.info(f"\t\t\tFold {i}: Please check {logger.handlers[1].baseFilename} for the current hyperparameters and stack trace.")
-                    logger.debug(f"\t\t\tFold {i}: Hyperparameters:\n\t{pipeline.hyperparameters}")
-                    logger.debug(f"\t\t\tFold {i}: Exception during automl search: {str(e)}")
-                    nan_scores = {objective: np.nan for objective in e.exceptions}
-                    scores = {**nan_scores, **e.scored_successfully}
-                    scores = OrderedDict({o.name: scores[o.name] for o in [self.objective] + self.additional_objectives})
-                    score = scores[self.objective.name]
-                else:
-                    logger.info(f"\t\t\tFold {i}: Encountered an error.")
-                    logger.info(f"\t\t\tFold {i}: All scores will be replaced with nan.")
-                    logger.info(f"\t\t\tFold {i}: Please check {logger.handlers[1].baseFilename} for the current hyperparameters and stack trace.")
-                    logger.debug(f"\t\t\tFold {i}: Hyperparameters:\n\t{pipeline.hyperparameters}")
-                    logger.debug(f"\t\t\tFold {i}: Exception during automl search: {str(e)}")
-                    score = np.nan
-                    scores = OrderedDict(zip([n.name for n in self.additional_objectives], [np.nan] * len(self.additional_objectives)))
-
-            ordered_scores = OrderedDict()
-            ordered_scores.update({self.objective.name: score})
-            ordered_scores.update(scores)
-            ordered_scores.update({"# Training": len(y_train)})
-            ordered_scores.update({"# Testing": len(y_test)})
-
-            evaluation_entry = {"all_objective_scores": ordered_scores, "score": score, 'binary_classification_threshold': None}
-            if isinstance(cv_pipeline, BinaryClassificationPipeline) and cv_pipeline.threshold is not None:
-                evaluation_entry['binary_classification_threshold'] = cv_pipeline.threshold
-            cv_data.append(evaluation_entry)
-        training_time = time.time() - start
-        cv_scores = pd.Series([fold['score'] for fold in cv_data])
-        cv_score_mean = cv_scores.mean()
-        logger.info(f"\tFinished cross validation - mean {self.objective.name}: {cv_score_mean:.3f}")
-        return {'cv_data': cv_data, 'training_time': training_time, 'cv_scores': cv_scores, 'cv_score_mean': cv_score_mean}
 
     def _add_result(self, trained_pipeline, parameters, training_time, cv_data, cv_scores):
         cv_score = cv_scores.mean()
@@ -747,15 +654,14 @@ class AutoMLSearch:
         if self.add_result_callback:
             self.add_result_callback(self._results['pipeline_results'][pipeline_id], trained_pipeline, self)
 
-    def _evaluate_pipelines(self, current_pipeline_batch, X, y, engine=None, baseline=False, search_iteration_plot=None):
+    def _evaluate_pipelines(self, current_pipeline_batch, X, y, baseline=False, search_iteration_plot=None, engine=None):
         current_batch_pipeline_scores = []
         current_pipeline_batch_size = 1 if isinstance(current_pipeline_batch, PipelineBase) else len(current_pipeline_batch)
         if engine is None:
             engine = SequentialEngine()
-            engine.load_data(X, y)
-
+        engine.load_data(X, y)
         engine.load_search(self)
-        if isinstance(current_pipeline_batch, PipelineBase):
+        if baseline or isinstance(current_pipeline_batch, PipelineBase):
             result = []
             while result == []:
                 pipeline, result = engine.evaluate_pipeline(current_pipeline_batch, log_pipeline=baseline)
@@ -770,10 +676,10 @@ class AutoMLSearch:
 
                 logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, result))
                 self._add_result(trained_pipeline=pipeline,
-                                parameters=parameters,
-                                training_time=result['training_time'],
-                                cv_data=result['cv_data'],
-                                cv_scores=result['cv_scores'])
+                                 parameters=parameters,
+                                 training_time=result['training_time'],
+                                 cv_data=result['cv_data'],
+                                 cv_scores=result['cv_scores'])
                 logger.debug('Adding results complete')
 
                 score = result['cv_score_mean']
