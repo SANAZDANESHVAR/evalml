@@ -1,18 +1,18 @@
+import sys
 import time
+import traceback
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-import traceback
-import sys
+from sklearn.model_selection import train_test_split
 
 from evalml.exceptions import PipelineScoreError
 from evalml.model_family import ModelFamily
 from evalml.pipelines import BinaryClassificationPipeline
 from evalml.problem_types import ProblemTypes
 from evalml.utils.logger import get_logger, update_pipeline
-from sklearn.model_selection import train_test_split
 
 logger = get_logger(__file__)
 
