@@ -4,6 +4,8 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
+import traceback
+import sys
 
 from evalml.exceptions import PipelineScoreError
 from evalml.model_family import ModelFamily
@@ -77,13 +79,13 @@ class EngineBase(ABC):
             try:
                 X_threshold_tuning = None
                 y_threshold_tuning = None
-                if self.search.optimize_thresholds and self.search.objective.problem_type == ProblemTypes.BINARY and self.search.objective.can_optimize_threshold:
+                if self.search.optimize_thresholds and self.search.objective.is_defined_for_problem_type(ProblemTypes.BINARY) and self.search.objective.can_optimize_threshold:
                     X_train, X_threshold_tuning, y_train, y_threshold_tuning = train_test_split(X_train, y_train, test_size=0.2, random_state=self.search.random_state)
                 cv_pipeline = pipeline.clone(pipeline.random_state)
                 logger.debug(f"\t\t\tFold {i}: starting training")
                 cv_pipeline.fit(X_train, y_train)
                 logger.debug(f"\t\t\tFold {i}: finished training")
-                if self.search.objective.problem_type == ProblemTypes.BINARY:
+                if self.search.objective.is_defined_for_problem_type(ProblemTypes.BINARY):
                     cv_pipeline.threshold = 0.5
                     if self.search.optimize_thresholds and self.search.objective.can_optimize_threshold:
                         logger.debug(f"\t\t\tFold {i}: Optimizing threshold for {self.search.objective.name}")
@@ -99,22 +101,15 @@ class EngineBase(ABC):
                 logger.debug(f"\t\t\tFold {i}: {self.search.objective.name} score: {scores[self.search.objective.name]:.3f}")
                 score = scores[self.search.objective.name]
             except Exception as e:
+                if self.search.error_callback is not None:
+                    self.search.error_callback(exception=e, traceback=traceback.format_tb(sys.exc_info()[2]), automl=self.search,
+                                               fold_num=i, pipeline=pipeline)
                 if isinstance(e, PipelineScoreError):
-                    logger.info(f"\t\t\tFold {i}: Encountered an error scoring the following objectives: {', '.join(e.exceptions)}.")
-                    logger.info(f"\t\t\tFold {i}: The scores for these objectives will be replaced with nan.")
-                    logger.info(f"\t\t\tFold {i}: Please check {logger.handlers[1].baseFilename} for the current hyperparameters and stack trace.")
-                    logger.debug(f"\t\t\tFold {i}: Hyperparameters:\n\t{pipeline.hyperparameters}")
-                    logger.debug(f"\t\t\tFold {i}: Exception during automl search: {str(e)}")
                     nan_scores = {objective: np.nan for objective in e.exceptions}
                     scores = {**nan_scores, **e.scored_successfully}
                     scores = OrderedDict({o.name: scores[o.name] for o in [self.search.objective] + self.search.additional_objectives})
                     score = scores[self.search.objective.name]
                 else:
-                    logger.info(f"\t\t\tFold {i}: Encountered an error.")
-                    logger.info(f"\t\t\tFold {i}: All scores will be replaced with nan.")
-                    logger.info(f"\t\t\tFold {i}: Please check {logger.handlers[1].baseFilename} for the current hyperparameters and stack trace.")
-                    logger.debug(f"\t\t\tFold {i}: Hyperparameters:\n\t{pipeline.hyperparameters}")
-                    logger.debug(f"\t\t\tFold {i}: Exception during automl search: {str(e)}")
                     score = np.nan
                     scores = OrderedDict(zip([n.name for n in self.search.additional_objectives], [np.nan] * len(self.search.additional_objectives)))
 
