@@ -378,7 +378,7 @@ class AutoMLSearch:
 
         self.data_split = self.data_split or default_data_split
 
-    def search(self, X, y, data_checks="auto", show_iteration_plot=True):
+    def search(self, X, y, data_checks="auto", show_iteration_plot=True, engine=None):
         """Find the best pipeline for the data set.
 
         Arguments:
@@ -504,7 +504,7 @@ class AutoMLSearch:
                 break
 
             current_batch_size = len(current_batch_pipelines)
-            current_batch_pipeline_scores = self._evaluate_pipelines(current_batch_pipelines, X, y, search_iteration_plot=search_iteration_plot)
+            current_batch_pipeline_scores = self._evaluate_pipelines(current_batch_pipelines, X, y, search_iteration_plot=search_iteration_plot, engine=engine)
 
             if search_iteration_plot:
                 search_iteration_plot.update()
@@ -570,7 +570,7 @@ class AutoMLSearch:
             if pipeline.problem_type != self.problem_type:
                 raise ValueError("Given pipeline {} is not compatible with problem_type {}.".format(pipeline.name, self.problem_type.value))
 
-    def _add_baseline_pipelines(self, X, y):
+    def _add_baseline_pipelines(self, X, y, engine=None):
         """Fits a baseline pipeline to the data.
 
         This is the first pipeline fit during search.
@@ -591,7 +591,7 @@ class AutoMLSearch:
         else:
             baseline = MeanBaselineRegressionPipeline(parameters={})
 
-        scores = self._evaluate_pipelines(baseline, X, y, baseline=True)
+        scores = self._evaluate_pipelines(baseline, X, y, baseline=True, engine=engine)
         if scores == []:
             return True
         return False
@@ -651,14 +651,14 @@ class AutoMLSearch:
         if self.add_result_callback:
             self.add_result_callback(self._results['pipeline_results'][pipeline_id], trained_pipeline, self)
 
-    def _evaluate_pipelines(self, current_pipeline_batch, X, y, engine=None, baseline=False, search_iteration_plot=None):
+    def _evaluate_pipelines(self, current_pipeline_batch, X, y, baseline=False, search_iteration_plot=None, engine=None):
         current_batch_pipeline_scores = []
         current_pipeline_batch_size = 1 if isinstance(current_pipeline_batch, PipelineBase) else len(current_pipeline_batch)
         if engine is None:
             engine = SequentialEngine()
-            engine.load_data(X, y)
-
+        engine.load_data(X, y)
         engine.load_search(self)
+        print(engine)
         if isinstance(current_pipeline_batch, PipelineBase):
             result = []
             while result == []:

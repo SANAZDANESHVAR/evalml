@@ -20,8 +20,8 @@ class SequentialEngine(EngineBase):
                     self.search.start_iteration_callback(pipeline.__class__, pipeline.parameters, self)
 
                 self.log_pipeline(pipeline, current_iteration)
-                evaluation_result = self._compute_cv_scores(pipeline, self.X, self.y)
-                fitted_pipelines.append(pipeline)
+                fitted_pipeline, evaluation_result = self._compute_cv_scores(pipeline, self.search, self.X, self.y)
+                fitted_pipelines.append(fitted_pipeline)
                 evaluation_results.append(evaluation_result)
             except KeyboardInterrupt:
                 pipeline_batch = self.search._handle_keyboard_interrupt(pipeline_batch, pipeline)
@@ -30,15 +30,13 @@ class SequentialEngine(EngineBase):
         return fitted_pipelines, evaluation_results, pipeline_batch
 
     def evaluate_pipeline(self, pipeline, log_pipeline=False):
-        evaluation_result = []
         try:
             if log_pipeline:
                 self.log_pipeline(pipeline)
             if self.search.start_iteration_callback:
                 self.search.start_iteration_callback(pipeline.__class__, pipeline.parameters, self)
-            evaluation_result = self._compute_cv_scores(pipeline, self.X, self.y)
+            return self._compute_cv_scores(pipeline, self.search, self.X, self.y)
         except KeyboardInterrupt:
             pipeline_batch = self.search._handle_keyboard_interrupt([], pipeline)
             if pipeline_batch == []:
                 return pipeline_batch, []
-        return pipeline, evaluation_result
