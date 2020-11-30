@@ -1070,7 +1070,6 @@ dont_interrupt_after_bad_message = ["Yes", "yes.", "n"]
 def test_catch_keyboard_interrupt(mock_fit, mock_score, mock_input,
                                   when_to_interrupt, user_input, number_results,
                                   X_y_binary):
-
     mock_input.side_effect = user_input
     X, y = X_y_binary
     callback = KeyboardInterruptOnKthPipeline(k=when_to_interrupt)

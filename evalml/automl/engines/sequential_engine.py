@@ -7,6 +7,7 @@ class SequentialEngine(EngineBase):
         self.name = "Sequential Engine"
 
     def evaluate_batch(self, pipeline_batch):
+        super().evaluate_batch()
         fitted_pipelines = []
         evaluation_results = []
         while len(pipeline_batch) > 0:
@@ -30,13 +31,16 @@ class SequentialEngine(EngineBase):
         return fitted_pipelines, evaluation_results, pipeline_batch
 
     def evaluate_pipeline(self, pipeline, log_pipeline=False):
+        super().evaluate_pipeline()
         try:
+            fitted_pipeline = None
+            evaluation_results = None
             if log_pipeline:
                 self.log_pipeline(pipeline)
             if self.search.start_iteration_callback:
                 self.search.start_iteration_callback(pipeline.__class__, pipeline.parameters, self)
-            return self._compute_cv_scores(pipeline, self.search, self.X, self.y)
+            fitted_pipeline, evaluation_results = self._compute_cv_scores(pipeline, self.search, self.X, self.y)
+            return fitted_pipeline, evaluation_results
         except KeyboardInterrupt:
             pipeline_batch = self.search._handle_keyboard_interrupt([], pipeline)
-            if pipeline_batch == []:
-                return pipeline_batch, []
+            return pipeline_batch, []

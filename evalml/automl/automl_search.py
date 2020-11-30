@@ -685,7 +685,6 @@ class AutoMLSearch:
                 score = result['cv_score_mean']
                 score_to_minimize = -score if self.objective.greater_is_better else score
                 current_batch_pipeline_scores.append(score_to_minimize)
-
         else:
             fitted_pipelines = []
             evaluation_results = []

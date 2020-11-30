@@ -32,14 +32,20 @@ class EngineBase(ABC):
         self.search = search
 
     @abstractmethod
-    def evaluate_batch(self, pipeline_batch):
-        if not self.X or not self.y:
-            raise ValueError("Dataset has not been loaded into the engine. Call load_data(X, y)")
+    def evaluate_batch(self, pipeline_batch=None):
+        if self.X is None or self.y is None:
+            raise ValueError("Dataset has not been loaded into the engine. Call `load_data` with training data.")
+
+        if self.search is None:
+            raise ValueError("Search info has not been loaded into the engine. Call `load_search` with search context.")
 
     @abstractmethod
-    def evaluate_pipeline(self, pipeline):
-        if not self.X or not self.y:
-            raise ValueError("Dataset has not been loaded into the engine. Call load_data(X, y)")
+    def evaluate_pipeline(self, pipeline=None):
+        if self.X is None or self.y is None:
+            raise ValueError("Dataset has not been loaded into the engine. Call `load_data` with training data.")
+
+        if self.search is None:
+            raise ValueError("Search info has not been loaded into the engine. Call `load_search` with search context.")
 
     def log_pipeline(self, pipeline, current_iteration=None):
         desc = f"{pipeline.name}"
