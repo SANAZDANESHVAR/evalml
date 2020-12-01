@@ -12,6 +12,10 @@ from evalml.exceptions import PipelineScoreError
 from evalml.model_family import ModelFamily
 from evalml.pipelines import BinaryClassificationPipeline
 from evalml.problem_types import ProblemTypes
+from evalml.utils.gen_utils import (
+    _convert_to_woodwork_structure,
+    _convert_woodwork_types_wrapper
+)
 from evalml.utils.logger import get_logger, update_pipeline
 
 logger = get_logger(__file__)
@@ -66,7 +70,13 @@ class EngineBase(ABC):
         start = time.time()
         cv_data = []
         logger.info("\tStarting cross validation")
-        for i, (train, test) in enumerate(search.data_split.split(X, y)):
+        X = _convert_to_woodwork_structure(X)
+        y = _convert_to_woodwork_structure(y)
+
+        X_pd = _convert_woodwork_types_wrapper(X.to_dataframe())
+        y_pd = _convert_woodwork_types_wrapper(y.to_series())
+        for i, (train, test) in enumerate(search.data_split.split(X_pd, y_pd)):
+
             if pipeline.model_family == ModelFamily.ENSEMBLE and i > 0:
                 # Stacked ensembles do CV internally, so we do not run CV here for performance reasons.
                 logger.debug(f"Skipping fold {i} because CV for stacked ensembles is not supported.")
@@ -75,8 +85,8 @@ class EngineBase(ABC):
             X_train, X_test = X.iloc[train], X.iloc[test]
             y_train, y_test = y.iloc[train], y.iloc[test]
             if search.problem_type in [ProblemTypes.BINARY, ProblemTypes.MULTICLASS]:
-                diff_train = set(np.setdiff1d(y, y_train))
-                diff_test = set(np.setdiff1d(y, y_test))
+                diff_train = set(np.setdiff1d(y.to_series(), y_train.to_series()))
+                diff_test = set(np.setdiff1d(y.to_series(), y_test.to_series()))
                 diff_string = f"Missing target values in the training set after data split: {diff_train}. " if diff_train else ""
                 diff_string += f"Missing target values in the test set after data split: {diff_test}." if diff_test else ""
                 if diff_string:
@@ -108,9 +118,10 @@ class EngineBase(ABC):
                 logger.debug(f"\t\t\tFold {i}: {search.objective.name} score: {scores[search.objective.name]:.3f}")
                 score = scores[search.objective.name]
             except Exception as e:
+
                 if search.error_callback is not None:
                     search.error_callback(exception=e, traceback=traceback.format_tb(sys.exc_info()[2]), automl=search,
-                                               fold_num=i, pipeline=pipeline)
+                                          fold_num=i, pipeline=pipeline)
                 if isinstance(e, PipelineScoreError):
                     nan_scores = {objective: np.nan for objective in e.exceptions}
                     scores = {**nan_scores, **e.scored_successfully}
@@ -123,8 +134,8 @@ class EngineBase(ABC):
             ordered_scores = OrderedDict()
             ordered_scores.update({search.objective.name: score})
             ordered_scores.update(scores)
-            ordered_scores.update({"# Training": len(y_train)})
-            ordered_scores.update({"# Testing": len(y_test)})
+            ordered_scores.update({"# Training": y_train.shape[0]})
+            ordered_scores.update({"# Testing": y_test.shape[0]})
 
             evaluation_entry = {"all_objective_scores": ordered_scores, "score": score, 'binary_classification_threshold': None}
             if isinstance(cv_pipeline, BinaryClassificationPipeline) and cv_pipeline.threshold is not None:

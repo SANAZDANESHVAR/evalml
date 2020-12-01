@@ -16,6 +16,7 @@ from evalml.automl.data_splitters import (
     TimeSeriesSplit,
     TrainingValidationSplit
 )
+from evalml.automl.engines import SequentialEngine
 from evalml.automl.utils import get_default_primary_search_objective
 from evalml.data_checks import (
     AutoMLDataChecks,
@@ -24,10 +25,7 @@ from evalml.data_checks import (
     EmptyDataChecks,
     HighVarianceCVDataCheck
 )
-from evalml.exceptions import (
-    AutoMLSearchException,
-    PipelineNotFoundError
-)
+from evalml.exceptions import AutoMLSearchException, PipelineNotFoundError
 from evalml.objectives import (
     get_all_objective_names,
     get_core_objectives,
