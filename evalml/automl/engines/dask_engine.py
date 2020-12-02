@@ -13,7 +13,7 @@ class DaskEngine(EngineBase):
         self.y_future = self.client.scatter(y)
         super().load_data(X, y)
 
-    def evaluate_batch(self, pipeline_batch):
+    def evaluate_batch(self, pipeline_batch, search_iteration_plot=None):
         fitted_pipelines = []
         evaluation_results = []
         if self.automl.start_iteration_callback:
@@ -30,7 +30,7 @@ class DaskEngine(EngineBase):
 
         return fitted_pipelines, evaluation_results, []
 
-    def evaluate_pipeline(self, pipeline, log_pipeline=False):
+    def evaluate_pipeline(self, pipeline, log_pipeline=False, search_iteration_plot=None):
         try:
             if log_pipeline:
                 self.log_pipeline(pipeline)
