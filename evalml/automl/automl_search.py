@@ -662,7 +662,7 @@ class AutoMLSearch:
         if baseline or isinstance(current_pipeline_batch, PipelineBase):
             result = []
             while result == []:
-                pipeline, result = engine.evaluate_pipeline(current_pipeline_batch, log_pipeline=baseline)
+                pipeline, result = engine.evaluate_pipeline(current_pipeline_batch, log_pipeline=baseline, search_iteration_plot=search_iteration_plot)
                 if pipeline == []:
                     return result
                 if len(result) == 0:
@@ -687,7 +687,7 @@ class AutoMLSearch:
             fitted_pipelines = []
             evaluation_results = []
             while len(current_pipeline_batch) != 0:
-                fitted_pipelines, evaluation_results, current_pipeline_batch = engine.evaluate_batch(current_pipeline_batch)
+                fitted_pipelines, evaluation_results, current_pipeline_batch = engine.evaluate_batch(current_pipeline_batch, search_iteration_plot=search_iteration_plot)
             for pipeline, result in zip(fitted_pipelines, evaluation_results):
                 parameters = pipeline.parameters
                 logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, evaluation_results))
@@ -704,9 +704,6 @@ class AutoMLSearch:
                 self._automl_algorithm.add_result(score_to_minimize, pipeline)
             if len(evaluation_results) != current_pipeline_batch_size:
                 return current_batch_pipeline_scores
-
-        if search_iteration_plot:
-            search_iteration_plot.update()
 
         return current_batch_pipeline_scores
 
