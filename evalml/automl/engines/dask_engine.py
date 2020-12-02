@@ -16,11 +16,11 @@ class DaskEngine(EngineBase):
     def evaluate_batch(self, pipeline_batch):
         fitted_pipelines = []
         evaluation_results = []
-        if self.search.start_iteration_callback:
+        if self.automl.start_iteration_callback:
             for pipeline in pipeline_batch:
-                self.search.start_iteration_callback(pipeline.__class__, pipeline.parameters, self.search)
+                self.automl.start_iteration_callback(pipeline.__class__, pipeline.parameters, self.automl)
                 
-        pipeline_futures = self.client.map(self._compute_cv_scores, pipeline_batch, search=self.search, X=self.X_future, y=self.y_future)
+        pipeline_futures = self.client.map(self._compute_cv_scores, pipeline_batch, automl=self.automl, X=self.X_future, y=self.y_future)
 
         for future in as_completed(pipeline_futures):
             pipeline, evaluation_result = future.result()
@@ -34,10 +34,10 @@ class DaskEngine(EngineBase):
         try:
             if log_pipeline:
                 self.log_pipeline(pipeline)
-            if self.search.start_iteration_callback:
-                self.search.start_iteration_callback(pipeline.__class__, pipeline.parameters, self)
-            return self._compute_cv_scores(pipeline, self.search, self.X, self.y)
+            if self.automl.start_iteration_callback:
+                self.automl.start_iteration_callback(pipeline.__class__, pipeline.parameters, self)
+            return self._compute_cv_scores(pipeline, self.automl, self.X, self.y)
         except KeyboardInterrupt:
-            pipeline_batch = self.search._handle_keyboard_interrupt([], pipeline)
+            pipeline_batch = self.automl._handle_keyboard_interrupt([], pipeline)
             if pipeline_batch == []:
                 return pipeline_batch, []
