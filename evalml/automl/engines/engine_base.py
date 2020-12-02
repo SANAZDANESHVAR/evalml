@@ -119,7 +119,7 @@ class EngineBase(ABC):
                 score = scores[automl.objective.name]
             except Exception as e:
                 if automl.error_callback is not None:
-                    automl.error_callback(exception=e, traceback=traceback.format_tb(sys.exc_info()[2]), automl=automl.search,
+                    automl.error_callback(exception=e, traceback=traceback.format_tb(sys.exc_info()[2]), automl=automl,
                                           fold_num=i, pipeline=pipeline)
                 if isinstance(e, PipelineScoreError):
                     nan_scores = {objective: np.nan for objective in e.exceptions}
