@@ -1,16 +1,14 @@
 from unittest.mock import patch
 
-import pandas as pd
-import pytest
-
 from evalml.automl import AutoMLSearch
 from evalml.automl.engines import SequentialEngine
-from evalml.pipelines import PipelineBase, LogisticRegressionClassifier
+from evalml.pipelines import LogisticRegressionClassifier
 
 
 class DummyAlgorithm:
     def __init__(self):
         self.batch_number = 0
+
 
 @patch('evalml.pipelines.RegressionPipeline.score')
 def test_load_new_engine(mock_score, X_y_binary, caplog):

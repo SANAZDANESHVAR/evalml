@@ -13,15 +13,15 @@ class SequentialEngine(EngineBase):
         while len(pipeline_batch) > 0:
             pipeline = pipeline_batch.pop()
             try:
-                current_iteration = len(self._results['pipeline_results']) + len(evaluation_results)
-                if not self._check_stopping_condition(self._start, current_iteration):
+                current_iteration = len(self.automl._results['pipeline_results']) + len(evaluation_results)
+                if not self.automl._check_stopping_condition(self.automl._start, current_iteration):
                     return fitted_pipelines, evaluation_results, []
 
-                if self.start_iteration_callback:
-                    self.start_iteration_callback(pipeline.__class__, pipeline.parameters, self)
+                if self.automl.start_iteration_callback:
+                    self.automl.start_iteration_callback(pipeline.__class__, pipeline.parameters, self)
 
                 self.log_pipeline(pipeline, current_iteration)
-                fitted_pipeline, evaluation_result = self._compute_cv_scores(pipeline, self.X, self.y)
+                fitted_pipeline, evaluation_result = self._compute_cv_scores(pipeline, self.automl, self.X, self.y)
 
                 if search_iteration_plot:
                     search_iteration_plot.update()
@@ -29,7 +29,7 @@ class SequentialEngine(EngineBase):
                 fitted_pipelines.append(fitted_pipeline)
                 evaluation_results.append(evaluation_result)
             except KeyboardInterrupt:
-                pipeline_batch = self._handle_keyboard_interrupt(pipeline_batch, pipeline)
+                pipeline_batch = self.automl._handle_keyboard_interrupt(pipeline_batch, pipeline)
                 if pipeline_batch == []:
                     return fitted_pipelines, evaluation_results, pipeline_batch
         return fitted_pipelines, evaluation_results, pipeline_batch
@@ -41,14 +41,14 @@ class SequentialEngine(EngineBase):
             evaluation_results = None
             if log_pipeline:
                 self.log_pipeline(pipeline)
-            if self.start_iteration_callback:
-                self.start_iteration_callback(pipeline.__class__, pipeline.parameters, self)
-            fitted_pipeline, evaluation_results = self._compute_cv_scores(pipeline, self.X, self.y)
+            if self.automl.start_iteration_callback:
+                self.automl.start_iteration_callback(pipeline.__class__, pipeline.parameters, self)
+            fitted_pipeline, evaluation_results = self._compute_cv_scores(pipeline, self.automl, self.X, self.y)
 
             if search_iteration_plot:
                 search_iteration_plot.update()
 
             return fitted_pipeline, evaluation_results
         except KeyboardInterrupt:
-            pipeline_batch = self._handle_keyboard_interrupt([], pipeline)
+            pipeline_batch = self.automl._handle_keyboard_interrupt([], pipeline)
             return pipeline_batch, []
