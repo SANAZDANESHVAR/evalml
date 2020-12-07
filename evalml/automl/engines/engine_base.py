@@ -34,19 +34,19 @@ class EngineBase(ABC):
         self.automl = None
 
     def load_data(self, X, y):
-        """Loads the data to fit the pipeline on. Required to run `_compute_cv_scores`.""" 
+        """Loads the data to fit the pipeline on. Required to run `_compute_cv_scores`."""
         self.X = X
         self.y = y
 
     def load_search(self, search_obj):
-        """Loads the current AutoML state. This includes information such as the search parameters and objectives, which is required to run `_compute_cv_scores`.""" 
+        """Loads the current AutoML state. This includes information such as the search parameters and objectives, which is required to run `_compute_cv_scores`."""
         self.automl = search_obj
 
     @abstractmethod
     def evaluate_batch(self, pipeline_batch=None):
-        """Evaluate a batch of pipelines using the current dataset and AutoML state. 
+        """Evaluate a batch of pipelines using the current dataset and AutoML state.
 
-        The abstract method includes checks to make sure that the dataset and an AutoML search object is loaded into the engine object. It is recommended that any implementation calls `super.evaluate_batch()` once before evaluating pipelines.  
+        The abstract method includes checks to make sure that the dataset and an AutoML search object is loaded into the engine object. It is recommended that any implementation calls `super.evaluate_batch()` once before evaluating pipelines.
 
         Arguments:
             pipeline_batch (list(PipelineBase)): A batch of pipelines to be fitted and evaluated
@@ -59,9 +59,9 @@ class EngineBase(ABC):
 
     @abstractmethod
     def evaluate_pipeline(self, pipeline_batch=None):
-        """Evaluate a single pipeline using the current dataset and AutoML state. 
+        """Evaluate a single pipeline using the current dataset and AutoML state.
 
-        The abstract method includes checks to make sure that the dataset and an AutoML search object is loaded into the engine object. It is recommended that any implementation calls `super.evaluate_pipeline()` once before evaluating the pipeline.  
+        The abstract method includes checks to make sure that the dataset and an AutoML search object is loaded into the engine object. It is recommended that any implementation calls `super.evaluate_pipeline()` once before evaluating the pipeline.
 
         Arguments:
             pipeline (list(class)): A pipeline to be fitted and evalauted
