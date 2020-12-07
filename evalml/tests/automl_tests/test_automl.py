@@ -1107,7 +1107,7 @@ def test_pipelines_in_batch_return_none(mock_evaluate_pipelines, mock_next_batch
         automl.search(X, y)
 
 
-@patch('sklearn.model_selection.train_test_split')
+@patch('evalml.automl.engines.engine_base.train_test_split')
 @patch('evalml.pipelines.BinaryClassificationPipeline.score')
 @patch('evalml.pipelines.BinaryClassificationPipeline.fit')
 def test_error_during_train_test_split(mock_fit, mock_score, mock_train_test_split, X_y_binary):

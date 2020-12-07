@@ -1,6 +1,6 @@
 import pandas as pd
 import pytest
-
+from evalml.automl.automl_search import AutoMLSearch
 from evalml.automl.engines import EngineBase
 
 
@@ -24,6 +24,13 @@ def test_load_data(X_y_binary):
     engine.load_data(X, y)
     pd.testing.assert_frame_equal(X, engine.X)
     pd.testing.assert_frame_equal(y, engine.y)
+
+
+def test_load_automl():
+    engine = DummyEngine()
+    automl = AutoMLSearch(problem_type='binary')
+    engine.load_search(automl)
+    assert engine.automl == automl
 
 
 def test_load_data_before_evaluate():

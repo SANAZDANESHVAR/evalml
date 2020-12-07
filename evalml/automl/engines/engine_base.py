@@ -22,21 +22,35 @@ logger = get_logger(__file__)
 
 
 class EngineBase(ABC):
+    """ Base class for engines, which handles the fitting and evaluation of pipelines."""
     def __init__(self):
+        """This class represents an "engine" for AutoML, which handles the evaluation of a list of pipelines generated from an AutoML search.
+
+        To use this interface, you must define an `evaluate_batch` method and an `evaluate_pipeline` method.
+        """
         self.name = "Base Engine"
         self.X = None
         self.y = None
         self.automl = None
 
     def load_data(self, X, y):
+        """Loads the data to fit the pipeline on. Required to run `_compute_cv_scores`.""" 
         self.X = X
         self.y = y
 
     def load_search(self, search_obj):
+        """Loads the current AutoML state. This includes information such as the search parameters and objectives, which is required to run `_compute_cv_scores`.""" 
         self.automl = search_obj
 
     @abstractmethod
     def evaluate_batch(self, pipeline_batch=None):
+        """Evaluate a batch of pipelines using the current dataset and AutoML state. 
+
+        The abstract method includes checks to make sure that the dataset and an AutoML search object is loaded into the engine object. It is recommended that any implementation calls `super.evaluate_batch()` once before evaluating pipelines.  
+
+        Arguments:
+            pipeline_batch (list(PipelineBase)): A batch of pipelines to be fitted and evaluated
+        """
         if self.X is None or self.y is None:
             raise ValueError("Dataset has not been loaded into the engine. Call `load_data` with training data.")
 
@@ -44,14 +58,21 @@ class EngineBase(ABC):
             raise ValueError("Search info has not been loaded into the engine. Call `load_search` with search context.")
 
     @abstractmethod
-    def evaluate_pipeline(self, pipeline=None):
+    def evaluate_pipeline(self, pipeline_batch=None):
+        """Evaluate a single pipeline using the current dataset and AutoML state. 
+
+        The abstract method includes checks to make sure that the dataset and an AutoML search object is loaded into the engine object. It is recommended that any implementation calls `super.evaluate_pipeline()` once before evaluating the pipeline.  
+
+        Arguments:
+            pipeline (list(class)): A pipeline to be fitted and evalauted
+        """
         if self.X is None or self.y is None:
             raise ValueError("Dataset has not been loaded into the engine. Call `load_data` with training data.")
 
         if self.automl is None:
             raise ValueError("Search info has not been loaded into the engine. Call `load_search` with search context.")
 
-    def log_pipeline(self, pipeline, current_iteration=None):
+    def log_pipeline(self, pipeline):
         desc = f"{pipeline.name}"
         if len(desc) > self.automl._MAX_NAME_LEN:
             desc = desc[:self.automl._MAX_NAME_LEN - 3] + "..."
@@ -59,13 +80,20 @@ class EngineBase(ABC):
 
         update_pipeline(logger,
                         desc,
-                        (current_iteration if current_iteration else len(self.automl._results['pipeline_results'])) + 1,
+                        len(self.automl._results['pipeline_results']) + 1,
                         self.automl.max_iterations,
                         self.automl._start,
                         1 if self.automl._automl_algorithm.batch_number == 0 else self.automl._automl_algorithm.batch_number,
                         self.automl.show_batch_output)
 
     def _add_result_callback(self, result_callback, pipeline, evaluation_result):
+        """Calls the result callback function with the pipeline evaluation results and updates the search iteration plot.
+
+        Arguments:
+            result_callback (callable): Function called after a pipeline is finished evaluation
+            pipeline (PipelineBase): An untrained pipeline with the parameters used during training
+            evaluation_result (dict): The training results for the pipeline
+        """
         parameters = pipeline.parameters
         logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, evaluation_result))
         result_callback(trained_pipeline=pipeline,
