@@ -65,6 +65,44 @@ class EngineBase(ABC):
                         1 if self.automl._automl_algorithm.batch_number == 0 else self.automl._automl_algorithm.batch_number,
                         self.automl.show_batch_output)
 
+    def _add_result_callback(self, result_callback, pipeline, evaluation_result):
+        parameters = pipeline.parameters
+        logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, evaluation_result))
+        result_callback(trained_pipeline=pipeline,
+                        parameters=parameters,
+                        training_time=evaluation_result['training_time'],
+                        cv_data=evaluation_result['cv_data'],
+                        cv_scores=evaluation_result['cv_scores'])
+        logger.debug('Adding results complete')
+
+        if self.automl.search_iteration_plot:
+            self.automl.search_iteration_plot.update()
+
+    def _handle_keyboard_interrupt(self, current_batch_pipelines, pipeline=None):
+        """Presents a prompt to the user asking if they want to stop the search.
+
+        Arguments:
+            current_batch_pipelines (list): Other pipelines in the batch.
+
+        Returns:
+            list: Next pipelines to search in the batch. If the user decides to stop the search,
+                an empty list will be returned.
+        """
+        leading_char = "\n"
+        start_of_loop = time.time()
+        while True:
+            choice = input(leading_char + "Do you really want to exit search (y/n)? ").strip().lower()
+            if choice == "y":
+                logger.info("Exiting AutoMLSearch.")
+                return []
+            elif choice == "n":
+                # So that the time in this loop does not count towards the time budget (if set)
+                time_in_loop = time.time() - start_of_loop
+                self.automl._start += time_in_loop
+                return [pipeline] + current_batch_pipelines if pipeline else current_batch_pipelines
+            else:
+                leading_char = ""
+
     @staticmethod
     def _compute_cv_scores(pipeline, automl, X, y):
         start = time.time()
@@ -76,7 +114,6 @@ class EngineBase(ABC):
         X_pd = _convert_woodwork_types_wrapper(X.to_dataframe())
         y_pd = _convert_woodwork_types_wrapper(y.to_series())
         for i, (train, test) in enumerate(automl.data_split.split(X_pd, y_pd)):
-
             if pipeline.model_family == ModelFamily.ENSEMBLE and i > 0:
                 # Stacked ensembles do CV internally, so we do not run CV here for performance reasons.
                 logger.debug(f"Skipping fold {i} because CV for stacked ensembles is not supported.")

@@ -242,6 +242,7 @@ class AutoMLSearch:
 
         self._validate_problem_type()
         self.problem_configuration = self._validate_problem_configuration(problem_configuration)
+        self.search_iteration_plot = None
 
     def _validate_objective(self, objective):
         non_core_objectives = get_non_core_objectives()
@@ -331,31 +332,6 @@ class AutoMLSearch:
             return EmptyDataChecks()
         else:
             return DataChecks(data_checks)
-
-    def _handle_keyboard_interrupt(self, current_batch_pipelines, pipeline=None):
-        """Presents a prompt to the user asking if they want to stop the search.
-
-        Arguments:
-            current_batch_pipelines (list): Other pipelines in the batch.
-
-        Returns:
-            list: Next pipelines to search in the batch. If the user decides to stop the search,
-                an empty list will be returned.
-        """
-        leading_char = "\n"
-        start_of_loop = time.time()
-        while True:
-            choice = input(leading_char + "Do you really want to exit search (y/n)? ").strip().lower()
-            if choice == "y":
-                logger.info("Exiting AutoMLSearch.")
-                return []
-            elif choice == "n":
-                # So that the time in this loop does not count towards the time budget (if set)
-                time_in_loop = time.time() - start_of_loop
-                self._start += time_in_loop
-                return [pipeline] + current_batch_pipelines if pipeline else current_batch_pipelines
-            else:
-                leading_char = ""
 
     def _set_data_split(self, X):
         """Sets the data split method for AutoMLSearch
@@ -481,15 +457,17 @@ class AutoMLSearch:
         if self.max_time is not None:
             logger.info("Will stop searching for new pipelines after %d seconds.\n" % self.max_time)
         logger.info("Allowed model families: %s\n" % ", ".join([model.value for model in self.allowed_model_families]))
-        search_iteration_plot = None
         if self.plot:
-            search_iteration_plot = self.plot.search_iteration_plot(interactive_plot=show_iteration_plot)
+            self.search_iteration_plot = self.plot.search_iteration_plot(interactive_plot=show_iteration_plot)
 
         self._start = time.time()
 
         should_terminate = self._add_baseline_pipelines(X, y)
         if should_terminate:
             return
+
+        if self.search_iteration_plot:
+            self.search_iteration_plot.update()
 
         current_batch_pipelines = []
         current_batch_pipeline_scores = []
@@ -504,10 +482,10 @@ class AutoMLSearch:
                 break
 
             current_batch_size = len(current_batch_pipelines)
-            current_batch_pipeline_scores = self._evaluate_pipelines(current_batch_pipelines, X, y, search_iteration_plot=search_iteration_plot, engine=engine)
+            current_batch_pipeline_scores = self._evaluate_pipelines(current_batch_pipelines, X, y, engine=engine)
 
-            if search_iteration_plot:
-                search_iteration_plot.update()
+            if self.search_iteration_plot:
+                self.search_iteration_plot.update()
 
             # Different size indicates early stopping
             if len(current_batch_pipeline_scores) != current_batch_size:
@@ -524,7 +502,7 @@ class AutoMLSearch:
         logger.info(f"Best pipeline: {best_pipeline_name}")
         logger.info(f"Best pipeline {self.objective.name}: {best_pipeline['score']:3f}")
 
-    def _check_stopping_condition(self, start, current_pipeline_count=None):
+    def _check_stopping_condition(self, start):
         should_continue = True
         num_pipelines = len(self._results['pipeline_results'])
 
@@ -535,8 +513,6 @@ class AutoMLSearch:
         # check max_time and max_iterations
         elapsed = time.time() - start
         if self.max_time and elapsed >= self.max_time:
-            return False
-        if current_pipeline_count and self.max_iterations and current_pipeline_count >= self.max_iterations:
             return False
         elif self.max_iterations and num_pipelines >= self.max_iterations:
             return False
@@ -652,7 +628,7 @@ class AutoMLSearch:
         if self.add_result_callback:
             self.add_result_callback(self._results['pipeline_results'][pipeline_id], trained_pipeline, self)
 
-    def _evaluate_pipelines(self, current_pipeline_batch, X, y, baseline=False, search_iteration_plot=None, engine=None):
+    def _evaluate_pipelines(self, current_pipeline_batch, X, y, baseline=False, engine=None):
         current_batch_pipeline_scores = []
         current_pipeline_batch_size = 1 if isinstance(current_pipeline_batch, PipelineBase) else len(current_pipeline_batch)
         if engine is None:
@@ -662,42 +638,28 @@ class AutoMLSearch:
         if baseline or isinstance(current_pipeline_batch, PipelineBase):
             result = []
             while result == []:
-                pipeline, result = engine.evaluate_pipeline(current_pipeline_batch, log_pipeline=baseline, search_iteration_plot=search_iteration_plot)
+                result_callback = self._add_result if not baseline else None
+                pipeline, result = engine.evaluate_pipeline(current_pipeline_batch, log_pipeline=baseline, result_callback=result_callback)
                 if pipeline == []:
                     return result
                 if len(result) == 0:
                     continue
-                parameters = pipeline.parameters
-
                 if baseline:
                     self._baseline_cv_scores = self._get_mean_cv_scores_for_all_objectives(result["cv_data"])
-
-                logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, result))
-                self._add_result(trained_pipeline=pipeline,
-                                 parameters=parameters,
-                                 training_time=result['training_time'],
-                                 cv_data=result['cv_data'],
-                                 cv_scores=result['cv_scores'])
-                logger.debug('Adding results complete')
-
+                    self._add_result(trained_pipeline=pipeline,
+                                     parameters=pipeline.parameters,
+                                     training_time=result['training_time'],
+                                     cv_data=result['cv_data'],
+                                     cv_scores=result['cv_scores'])
                 score = result['cv_score_mean']
                 score_to_minimize = -score if self.objective.greater_is_better else score
                 current_batch_pipeline_scores.append(score_to_minimize)
         else:
-            fitted_pipelines = []
+            completed_pipelines = []
             evaluation_results = []
             while len(current_pipeline_batch) != 0:
-                fitted_pipelines, evaluation_results, current_pipeline_batch = engine.evaluate_batch(current_pipeline_batch, search_iteration_plot=search_iteration_plot)
-            for pipeline, result in zip(fitted_pipelines, evaluation_results):
-                parameters = pipeline.parameters
-                logger.debug('Adding results for pipeline {}\nparameters {}\nevaluation_results {}'.format(pipeline.name, parameters, evaluation_results))
-                self._add_result(trained_pipeline=pipeline,
-                                 parameters=parameters,
-                                 training_time=result['training_time'],
-                                 cv_data=result['cv_data'],
-                                 cv_scores=result['cv_scores'])
-                logger.debug('Adding results complete')
-
+                completed_pipelines, evaluation_results, current_pipeline_batch = engine.evaluate_batch(current_pipeline_batch, log_pipeline=True, result_callback=self._add_result)
+            for pipeline, result in zip(completed_pipelines, evaluation_results):
                 score = result['cv_score_mean']
                 score_to_minimize = -score if self.objective.greater_is_better else score
                 current_batch_pipeline_scores.append(score_to_minimize)
