@@ -42,7 +42,8 @@ class SequentialEngine(EngineBase):
         return completed_pipelines, evaluation_results, pipeline_batch
 
     def evaluate_pipeline(self, pipeline, result_callback=None, log_pipeline=False):
-        """ Evaluates a sinle
+        """ Evaluates a single pipeline.
+        
         Arguments:
             pipeline_batch (PipelineBase): A pipelines to be fitted and evaluated.
             result_callback (callable): Function called once the pipeline is finished evaluating to store the results. If None, results will only be returned.

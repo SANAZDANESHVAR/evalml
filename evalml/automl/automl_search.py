@@ -466,9 +466,6 @@ class AutoMLSearch:
         if should_terminate:
             return
 
-        if self.search_iteration_plot:
-            self.search_iteration_plot.update()
-
         current_batch_pipelines = []
         current_batch_pipeline_scores = []
         while self._check_stopping_condition(self._start):
@@ -483,9 +480,6 @@ class AutoMLSearch:
 
             current_batch_size = len(current_batch_pipelines)
             current_batch_pipeline_scores = self._evaluate_pipelines(current_batch_pipelines, X, y, engine=engine)
-
-            if self.search_iteration_plot:
-                self.search_iteration_plot.update()
 
             # Different size indicates early stopping
             if len(current_batch_pipeline_scores) != current_batch_size:
@@ -646,11 +640,7 @@ class AutoMLSearch:
                     continue
                 if baseline:
                     self._baseline_cv_scores = self._get_mean_cv_scores_for_all_objectives(result["cv_data"])
-                    self._add_result(trained_pipeline=pipeline,
-                                     parameters=pipeline.parameters,
-                                     training_time=result['training_time'],
-                                     cv_data=result['cv_data'],
-                                     cv_scores=result['cv_scores'])
+                    engine._add_result_callback(self._add_result, pipeline, result)
                 score = result['cv_score_mean']
                 score_to_minimize = -score if self.objective.greater_is_better else score
                 current_batch_pipeline_scores.append(score_to_minimize)
