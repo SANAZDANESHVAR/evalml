@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+
 from evalml.automl.automl_search import AutoMLSearch
 from evalml.automl.engines import EngineBase
 
